@@ -24,12 +24,13 @@ using namespace std;
 
 #define PARTS(x, y) (x / y + (x % y == 0 ? 0 : 1))
 
-#define B(x) (x)
-#define KB(x) (x * 1024)
-#define MB(x) (KB(x) * 1024)
-#define GB(x) (MB(x) * 1024)
-
 #include "CFG.h"
+
+void DelFile(const string &sFullFileNameWithPath)
+{
+  string sCmd = string(XS("echo off & del \"")) + string(sFullFileNameWithPath) + XS("\"");
+  std::system(sCmd.c_str());
+}
 
 bool TransformFile(const string &sFullFileName)
 {
@@ -91,8 +92,7 @@ bool TransformFile(const string &sFullFileName)
   }
   srcFile.close();
 
-  string sCmd = string(XS("echo off & del \"")) + string(sFullFileName) + XS("\"");
-  system(sCmd.c_str());
+  DelFile(sFullFileName);
 
   cout << "Parts created: " << dwPartsCount << endl;
   return true;
@@ -120,6 +120,8 @@ bool AssembleFile(const string &sFullFileName)
     return false;
   }
 
+  vector<string> vPartsFullPathes;
+
   for (DWORD i = 0; i < dwPartsCount; i++)
   {
     string sTempPartFileNameWithPath =
@@ -136,6 +138,7 @@ bool AssembleFile(const string &sFullFileName)
     if (fInfo.nFileSizeLow < 1)
     {
       cout << "Part file \'" << sTempPartFileNameWithPath << +"\' is empty!" << endl;
+      dstFile.close();
       return false;
     }
 
@@ -143,6 +146,9 @@ bool AssembleFile(const string &sFullFileName)
     if (!srcPart.is_open())
     {
       cout << "Failed to open part file: \'" << sTempPartFileNameWithPath << "\'" << endl;
+      srcPart.close();
+      dstFile.close();
+      DelFile(sTransformedFileNameWithPath);
       return false;
     }
 
@@ -153,11 +159,15 @@ bool AssembleFile(const string &sFullFileName)
 
     srcPart.close();
 
-    string sCmd = string(XS("echo off & del \"")) + string(sTempPartFileNameWithPath) + XS("\"");
-    system(sCmd.c_str());
+    vPartsFullPathes.push_back(sTempPartFileNameWithPath);
   }
 
   dstFile.close();
+
+  for (int i = 0; i < (int)vPartsFullPathes.size(); i++)
+  {
+    DelFile(vPartsFullPathes[i]);
+  }
 
   return true;
 }
@@ -189,7 +199,7 @@ int main(int iArgCount, char** pszArgs)
   {
     cout << "Drag & drop any big size file onto this program..." << endl;
   }
-  system("pause");
+  std::system("pause");
 
   return 0;
 }
