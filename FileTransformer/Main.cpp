@@ -32,14 +32,21 @@ void DelFile(const string &sFullFileNameWithPath)
   std::system(sCmd.c_str());
 }
 
+ifstream::pos_type GetFileSize(const string &FullFileNameWithPath)
+{
+  ifstream in(FullFileNameWithPath.c_str(), ifstream::ate | ifstream::binary);
+  ifstream::pos_type size = in.tellg();
+  in.close();
+  return size;
+}
+
 bool TransformFile(const string &sFullFileName)
 {
   string sFileName = U::GetFileName(sFullFileName);
 
-  WIN32_FILE_ATTRIBUTE_DATA fInfo;
-  GetFileAttributesExA(sFullFileName.c_str(), GetFileExInfoStandard, &fInfo);
+  long long unsigned int lluiFileSize = GetFileSize(sFullFileName);
 
-  if (fInfo.nFileSizeLow < 1)
+  if (lluiFileSize < 1)
   {
     cout << "Source file \'" << sFileName << +"\' is empty!" << endl;
     return false;
@@ -52,23 +59,21 @@ bool TransformFile(const string &sFullFileName)
     return false;
   }
 
-  cout << "Transforming file \'" << sFileName << "\'..." << endl;
+  DWORD dwPartsCount = (DWORD)PARTS(lluiFileSize, PART_SIZE);
+  DWORD dwTempPartSize = (DWORD)(lluiFileSize / dwPartsCount);
 
-  DWORD dwPartsCount = PARTS(fInfo.nFileSizeLow, PART_SIZE);
-  DWORD dwTempPartSize = fInfo.nFileSizeLow / dwPartsCount;
-
-  for (DWORD i = 0, dwWrittenBytes = 0; i < dwPartsCount; i++)
+  for (long long unsigned int i = 0, lluiWrittenBytes = 0; i < dwPartsCount; i++)
   {
     if (i + 1 >= dwPartsCount)
     {
-      dwTempPartSize += fInfo.nFileSizeLow - dwTempPartSize * (i + 1);
+      dwTempPartSize += (DWORD)(lluiFileSize - dwTempPartSize * (i + 1));
     }
 
     string sFullPartFile =
       sFullFileName +
       string(PART_EXT) +
       PART_INFO_SEPARATOR +
-      to_string(i) +
+      to_string(i + 1) +
       PART_INFO_SEPARATOR +
       to_string(dwPartsCount);
 
@@ -83,12 +88,11 @@ bool TransformFile(const string &sFullFileName)
     srcFile.read(mem, dwTempPartSize);
     dstFile.write(mem, dwTempPartSize);
     delete[] mem;
+    dstFile.close();
 
-    dwWrittenBytes += dwTempPartSize;
+    lluiWrittenBytes += dwTempPartSize;
 
     cout << "\tPart \'" << U::GetFileName(sFullPartFile) << "\' created! (" << dwTempPartSize << " bytes)" << endl;
-
-    dstFile.close();
   }
   srcFile.close();
 
@@ -105,13 +109,12 @@ bool AssembleFile(const string &sFullFileName)
   string sTransformedFileName = sInputFileName.substr(0, sInputFileName.find(PART_EXT));
   string sTransformedFileNameWithPath = sInputFilePath + "\\" + sTransformedFileName;
 
-  cout << "Detected part(s) of transformed file \'" << sTransformedFileName << "\'..." << endl;
   cout << "Assembling to file \'" << sTransformedFileName << "\'..." << endl;
 
   vector<string> vFileInfo = U::Split(sInputFileName, PART_INFO_SEPARATOR);
 
   string sInputPartFileName = vFileInfo[0];
-  DWORD dwPartsCount = stoi(vFileInfo[vFileInfo.size() - 1]);
+  long long unsigned int lluiPartsCount = stoi(vFileInfo[vFileInfo.size() - 1]);
 
   ofstream dstFile(sTransformedFileNameWithPath.c_str(), ios::binary);
   if (!dstFile.is_open())
@@ -122,20 +125,19 @@ bool AssembleFile(const string &sFullFileName)
 
   vector<string> vPartsFullPathes;
 
-  for (DWORD i = 0; i < dwPartsCount; i++)
+  for (long long unsigned int i = 0; i < lluiPartsCount; i++)
   {
     string sTempPartFileNameWithPath =
       sInputFilePath + "\\" +
       sInputPartFileName +
       PART_INFO_SEPARATOR +
-      to_string(i) +
+      to_string(i + 1) +
       PART_INFO_SEPARATOR +
-      to_string(dwPartsCount);
+      to_string(lluiPartsCount);
 
-    WIN32_FILE_ATTRIBUTE_DATA fInfo;
-    GetFileAttributesExA(sTempPartFileNameWithPath.c_str(), GetFileExInfoStandard, &fInfo);
+    DWORD dwPartSize = (DWORD)GetFileSize(sTempPartFileNameWithPath);
 
-    if (fInfo.nFileSizeLow < 1)
+    if (dwPartSize < 1)
     {
       cout << "Part file \'" << sTempPartFileNameWithPath << +"\' is empty!" << endl;
       dstFile.close();
@@ -152,14 +154,14 @@ bool AssembleFile(const string &sFullFileName)
       return false;
     }
 
-    char* mem = new char[fInfo.nFileSizeLow];
-    srcPart.read(mem, fInfo.nFileSizeLow);
-    dstFile.write(mem, fInfo.nFileSizeLow);
+    char* mem = new char[dwPartSize];
+    srcPart.read(mem, dwPartSize);
+    dstFile.write(mem, dwPartSize);
     delete[] mem;
-
     srcPart.close();
 
     vPartsFullPathes.push_back(sTempPartFileNameWithPath);
+    cout << "\tPart \'" << U::GetFileName(sTempPartFileNameWithPath) << "\' assembled! (" << dwPartSize << " bytes)" << endl;
   }
 
   dstFile.close();
@@ -182,16 +184,27 @@ int main(int iArgCount, char** pszArgs)
 
     if (sFileName.find(string(PART_EXT) + PART_INFO_SEPARATOR) == string::npos)
     {
+      cout << "Transforming file \'" << sFileName << "\'..." << endl;
       if (TransformFile(sFullFileName))
       {
         cout << "File successful transformated!" << endl;
       }
+      else
+      {
+        cout << "File transforming failed!" << endl;
+      }
     }
     else
     {
+      string sTransformedFileName = sFileName.substr(0, sFileName.find(PART_EXT));
+      cout << "Detected part(s) of transformed file \'" << sTransformedFileName << "\'..." << endl;
       if (AssembleFile(sFullFileName))
       {
         cout << "File successful assembled!" << endl;
+      }
+      else
+      {
+        cout << "File assembling failed!" << endl;
       }
     }
   }

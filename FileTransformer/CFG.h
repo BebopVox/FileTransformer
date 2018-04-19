@@ -7,4 +7,4 @@
 
 #define PART_EXT              ".ft"
 #define PART_INFO_SEPARATOR   "..."
-#define PART_SIZE             MB(1)
+#define PART_SIZE             MB(500)
